@@ -141,4 +141,61 @@ ggplot(pastCustomers, aes(TransactionMonth,numberCustomers , color = Store_type)
   geom_line() +
   labs(x = "Month of Operation", y = "Total Num of Customers", title = "Total Num of Customers per month")
 
-  
+
+## Assessment of trial
+
+#### Scale pre-trial control sales to match pre-trial trial store sales
+scalingFactorForControlSales <- preTrialMeasures[STORE_NBR == trial_store & YEARMONTH < 201902, sum(totSales)]/preTrialMeasures[
+  STORE_NBR == control_store & YEARMONTH < 201902, sum(totSales)]
+#### Apply the scaling factor
+measureOverTimeSales <- measureOverTime
+scaledControlSales <- measureOverTimeSales[STORE_NBR == control_store, ][ ,controlSales := totSales * scalingFactorForControlSales]
+
+####Calculate the percentage difference between scaled control sales and trial sales
+percentageDiff <- merge(scaledControlSales[, c("YEARMONTH", "controlSales")],
+                        measureOverTime[STORE_NBR== trial_store, c("totSales", "YEARMONTH")],
+                        by ="YEARMONTH")[, percentageDiff := abs(controlSales-totSales)/controlSales]
+#### standard deviation based on the scaled percentage differencein the pre-trial period
+stdDev <- sd(percentageDiff[YEARMONTH < 201902 , percentageDiff])
+degreesOfFreedom <- 7
+
+####  Calculate the t-values for the trial months
+
+percentageDiff[, tValue :=(percentageDiff/stdDev)
+][, TransactionMonth :=  as.Date(paste(YEARMONTH%%100, YEARMONTH%%100,1, sep='-'), "%Y-%m-%d")
+][YEARMONTH<201905 & YEARMONTH > 201901, .(TransactionMonth, tValue)]
+
+qt(0.95, df = degreesOfFreedom)
+
+
+
+measureOverTimeSales <- measureOverTime 
+
+
+pastSales <- measureOverTimeSales[, Store_type := ifelse(STORE_NBR == trial_store, "Trial",
+                                                         ifelse(STORE_NBR == control_store, "Control", "Other stores"))
+][, totSales := mean(totSales), by = c("YEARMONTH","Store_type")
+][, TransactionMonth := as.Date(paste(YEARMONTH %/%
+                                        100, YEARMONTH %% 100, 1, sep = "-"), "%Y-%m-%d")
+][Store_type %in% c("Trial", "Control"), ]
+
+#### Control store 95th percentile
+pastSales_Controls95 <- pastSales[Store_type == "Control",
+][, totSales := totSales * (1 + stdDev * 2)
+][, Store_type := "Control 95th % confidence
+interval"]
+
+#### Control store 5th percentile
+pastSales_Controls5 <- pastSales[Store_type == "Control",
+][, totSales := totSales * (1 - stdDev * 2)
+][, Store_type := "Control 5th % confidence
+interval"]
+
+trialAssessment <- rbind(pastSales, pastSales_Controls95, pastSales_Controls5)
+
+ggplot(trialAssessment, aes(TransactionMonth, totSales, color = Store_type)) +
+  geom_rect(data = trialAssessment[ YEARMONTH < 201905 & YEARMONTH > 201901 ,],
+            aes(xmin = min(TransactionMonth), xmax = max(TransactionMonth), ymin = 0 , ymax =
+                  Inf, color = NULL), show.legend = FALSE) +
+  geom_line() +
+  labs(x = "Month of operation", y = "Total sales", title = "Total sales by month")
