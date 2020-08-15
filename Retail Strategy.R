@@ -42,11 +42,11 @@ preTrialMeasures <- measureOverTime[YEARMONTH < 201902 & STORE_NBR %in% storesWi
 calculateCorrelation <- function(inputTable, metricCol, storeComparison) {
   calcCorrTable = data.table(Store1 = numeric(), Store2 = numeric(), corr_measure =
                                numeric())
-  storeNumbers <-
+  storeNumbers <-unique(inputTable[, STORE_NBR])
     for (i in storeNumbers) {
       calculatedMeasure = data.table("Store1" = storeComparison,
                                      "Store2" = i,
-                                     "corr_measure" =
+                                     "corr_measure" = cor(inputTable[STORE_NBR == storeComparison, eval(metricCol)], inputTable[STORE_NBR==i, eval(metricCol)])
       )
       calcCorrTable <- rbind(calcCorrTable, calculatedMeasure)
     }
@@ -84,3 +84,61 @@ finalDistTable <- distTable[, .(mag_measure = mean(magnitudeMeasure)), by =
                               .(Store1, Store2)]
 return(finalDistTable)
 }
+
+
+#### calculate correlations against store 77 using total sales and number of customers.
+
+trial_store <- 77
+corr_nSales <- calculateCorrelation(preTrialMeasures, quote(totSales), trial_store)
+corr_nCustomers <- calculateCorrelation(preTrialMeasures, quote(nCustomers), trial_store)
+
+#### Then, use the functions for calculating magnitude.
+magnitude_nSales <- calculateMagnitudeDistance(preTrialMeasures, quote(totSales),trial_store)
+magnitude_nCustomers <- calculateMagnitudeDistance(preTrialMeasures, quote(nCustomers), trial_store)
+
+
+####combined score composed of correlation and magnitude, by merging the correlations table with the magnitude table 
+corr_weight <- 0.5
+score_nSales <- merge(corr_nSales,magnitude_nSales , by = c("Store1", "Store2"))[, scoreNSales := corr_measure*corr_weight +mag_measure *(1-corr_weight)]
+score_nCustomers <- merge(corr_nCustomers,magnitude_nCustomers , by = c("Store1", "Store2"))[, scoreNCust := corr_measure*corr_weight +mag_measure *(1-corr_weight)]
+
+#### Combine scores across the drivers by first merging our sales scores and customer scores into a single table
+score_Control <- merge(score_nSales,score_nCustomers , by =  c("Store1", "Store2"))
+score_Control[, finalControlScore := scoreNSales * 0.5 + scoreNCust * 0.5]
+
+#### Select control stores based on the highest matching store (closest to 1 but
+#### not the store itself, i.e. the second ranked highest store)
+
+control_store <- score_Control[Store1==trial_store, ][order(-finalControlScore)][2,Store2]
+control_store
+
+#### Visual checks on trends based on the drivers
+measureOverTimeSales <- measureOverTime
+pastSales <- measureOverTimeSales[, Store_type := ifelse(STORE_NBR == trial_store,
+                                                         "Trial",
+                                                         ifelse(STORE_NBR == control_store,
+                                                                "Control", "Other stores"))
+][, totSales := mean(totSales), by = c("YEARMONTH",
+                                       "Store_type")
+][, TransactionMonth := as.Date(paste(YEARMONTH %/%
+                                        100, YEARMONTH %% 100, 1, sep = "-"), "%Y-%m-%d")
+][YEARMONTH < 201903 , ]
+ggplot(pastSales, aes(TransactionMonth, totSales, color = Store_type)) +
+  geom_line() +
+  labs(x = "Month of operation", y = "Total sales", title = "Total sales by month")
+
+#### number of customers
+####visual checks on customer count trends by comparing the trial store to the control store and other stores.
+
+
+measureOverTimeCusts <- measureOverTime
+pastCustomers <- measureOverTimeCusts[, Store_type := ifelse(STORE_NBR == trial_store, "Trial", ifelse(STORE_NBR==control_store, "Control", "Other"))
+][,numberCustomers :=mean(nCustomers), by = c("YEARMONTH", "Store_type")
+][,TransactionMonth := as.Date(paste(YEARMONTH%%100, YEARMONTH%%100,1, sep='-'), "%Y-%m-%d")
+][YEARMONTH<201903, ]
+
+ggplot(pastCustomers, aes(TransactionMonth,numberCustomers , color = Store_type)) +
+  geom_line() +
+  labs(x = "Month of Operation", y = "Total Num of Customers", title = "Total Num of Customers per month")
+
+  
