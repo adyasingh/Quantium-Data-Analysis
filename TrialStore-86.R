@@ -72,10 +72,10 @@ scaledControlSales <- measureOverTimeSales[STORE_NBR == control_store, ][ ,
 
 #### Calculate the percentage difference between scaled control sales and trial sales
 
-percentageDiff <- merge(scaledControlCustomers[,c("YEARMONTH", "controlCustomers")],
-                        measureOverTime[STORE_NBR==trial_store, c("nCustomers", "YEARMONTH")],
+percentageDiff <- merge(scaledControlSales[,c("YEARMONTH", "controlSales")],
+                        measureOverTime[STORE_NBR==trial_store, c("totSales", "YEARMONTH")],
                         by = "YEARMONTH"
-)[, percentageDiff := abs(controlCustomers-nCustomers)/controlCustomers]
+)[, percentageDiff := abs(controlSales-totSales)/controlSales]
 
 
 #### Calculate the standard deviation of percentage differences during the pre-trial period
@@ -87,14 +87,10 @@ degreesOfFreedom <- 7
 ####  Create a table with sales by store type and month.
 measureOverTimeSales <- measureOverTime
 
-pastSales <- measureOverTimeSales[, Store_type := ifelse(STORE_NBR == trial_store,
-                                                         "Trial",
-                                                         ifelse(STORE_NBR == control_store,
-                                                                "Control", "Other stores"))
-][, totSales := mean(totSales), by = c("YEARMONTH",
-                                       "Store_type")
-][, TransactionMonth := as.Date(paste(YEARMONTH %/%
-                                        100, YEARMONTH %% 100, 1, sep = "-"), "%Y-%m-%d")
+pastSales <- measureOverTimeSales[, Store_type := ifelse(STORE_NBR == trial_store, "Trial",
+                                                         ifelse(STORE_NBR == control_store, "Control", "Other stores"))
+][, totSales := mean(totSales), by = c("YEARMONTH", "Store_type")
+][, TransactionMonth := as.Date(paste(YEARMONTH %/% 100, YEARMONTH %% 100, 1, sep = "-"), "%Y-%m-%d")
 ][Store_type %in% c("Trial", "Control") ]
 
 #### Control store 95th percentile
@@ -116,7 +112,7 @@ ggplot(trialAssessment, aes(TransactionMonth, totSales, color = Store_type)) +
             aes(xmin = min(TransactionMonth), xmax = max(TransactionMonth), ymin = 0 , ymax =
                   Inf, color = NULL), show.legend = FALSE) +
   geom_line(aes(linetype = Store_type)) +
-  labs(x = "Month of operation", y = "Total sales", title = "Total sales by month")
+  labs(x = "Month of operation", y = "Total sales", title = "Total sales by month: 86")
 
 
 
